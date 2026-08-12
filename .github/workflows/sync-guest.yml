@@ -1,0 +1,124 @@
+name: Sync guest
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-caffeinix-guest
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Test upstream Caffeinix
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      changed: ${{ steps.upstream.outputs.changed }}
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Inspect upstream Caffeinix
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/sync-upstream.mjs --write
+
+      - name: Install host dependencies
+        if: ${{ steps.upstream.outputs.changed == 'true' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binutils-riscv64-linux-gnu \
+            dosfstools \
+            e2fsprogs \
+            gcc-riscv64-linux-gnu \
+            make \
+            ripgrep
+
+      - name: Restore browser build inputs
+        if: ${{ steps.upstream.outputs.changed == 'true' }}
+        uses: actions/cache@v6
+        with:
+          path: |
+            output/downloads
+            output/qemu-wasm
+          key: browser-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('qemu-wasm.lock', 'build/qemu-wasm/Dockerfile', 'scripts/build-qemu-wasm.sh') }}
+
+      - name: Install JavaScript dependencies
+        if: ${{ steps.upstream.outputs.changed == 'true' }}
+        run: npm ci
+
+      - name: Install test browsers
+        if: ${{ steps.upstream.outputs.changed == 'true' }}
+        run: npx playwright install --with-deps chromium firefox
+
+      - name: Build and test the candidate
+        if: ${{ steps.upstream.outputs.changed == 'true' }}
+        run: make JOBS=2 test
+
+      - name: Recheck upstream and web main
+        if: ${{ steps.upstream.outputs.changed == 'true' }}
+        env:
+          EXPECTED: ${{ steps.upstream.outputs.candidate }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/sync-upstream.mjs --recheck --expect "$EXPECTED"
+          git fetch --no-tags origin main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+
+      - name: Record the tested guest
+        if: ${{ steps.upstream.outputs.changed == 'true' }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email \
+            '41898282+github-actions[bot]@users.noreply.github.com'
+          git add guest.lock
+          git commit -s -m 'build: update Caffeinix guest' \
+            -m 'Adopt the tested Caffeinix main revision after all checks passed.'
+          git push origin HEAD:main
+
+      - name: Upload the tested production site
+        if: ${{ steps.upstream.outputs.changed == 'true' }}
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    name: Pages deployment
+    if: ${{ needs.sync.outputs.changed == 'true' }}
+    needs: sync
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

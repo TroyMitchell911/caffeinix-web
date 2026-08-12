@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/TroyMitchell911/caffeinix.git",
+  "branch": "main",
+  "requiredChecks": [
+    "Kernel build",
+    "QEMU runtime"
+  ]
+}

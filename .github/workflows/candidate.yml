@@ -1,0 +1,77 @@
+name: Kernel candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full Caffeinix commit ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: candidate-${{ github.ref }}-${{ inputs.commit }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Candidate browser build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Select and verify the candidate
+        env:
+          CANDIDATE: ${{ inputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/set-candidate.mjs "$CANDIDATE"
+          node scripts/sync-upstream.mjs --check-current
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binutils-riscv64-linux-gnu \
+            dosfstools \
+            e2fsprogs \
+            gcc-riscv64-linux-gnu \
+            make \
+            ripgrep
+
+      - name: Restore browser build inputs
+        uses: actions/cache@v6
+        with:
+          path: |
+            output/downloads
+            output/qemu-wasm
+          key: browser-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('qemu-wasm.lock', 'build/qemu-wasm/Dockerfile', 'scripts/build-qemu-wasm.sh') }}
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Install test browsers
+        run: npx playwright install --with-deps chromium firefox
+
+      - name: Build and test the candidate
+        run: make JOBS=2 test
+
+      - name: Upload candidate site
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: caffeinix-candidate-${{ inputs.commit }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 7

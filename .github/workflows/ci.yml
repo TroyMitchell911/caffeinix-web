@@ -1,0 +1,98 @@
+name: Web
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Browser build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binutils-riscv64-linux-gnu \
+            dosfstools \
+            e2fsprogs \
+            gcc-riscv64-linux-gnu \
+            make \
+            ripgrep
+
+      - name: Restore browser build inputs
+        uses: actions/cache@v6
+        with:
+          path: |
+            output/downloads
+            output/qemu-wasm
+          key: browser-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('qemu-wasm.lock', 'build/qemu-wasm/Dockerfile', 'scripts/build-qemu-wasm.sh') }}
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Install test browsers
+        run: npx playwright install --with-deps chromium firefox
+
+      - name: Build and test the Pages site
+        run: make JOBS=2 test
+
+      - name: Upload candidate site
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: caffeinix-pages-${{ github.sha }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload production site
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    name: Pages deployment
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
