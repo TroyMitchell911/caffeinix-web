@@ -1,0 +1,24 @@
+{
+  "name": "caffeinix-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build-site.mjs",
+    "check:site": "node scripts/check-site.mjs",
+    "serve": "node scripts/serve.mjs --root dist",
+    "test:browser": "playwright test",
+    "test:unit": "node --test tests/unit/*.test.mjs"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "xterm-pty": "0.10.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  }
+}

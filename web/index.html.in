@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#07110d">
+    <meta name="description"
+          content="Run Caffeinix locally in a RISC-V browser virtual machine">
+    <meta name="caffeinix-manifest" content="./assets/manifest.json">
+    <title>Caffeinix browser console</title>
+    <script>
+      window.coi = {
+        coepCredentialless: () => false,
+        coepDegrade: () => false
+      };
+    </script>
+    <script src="./coi-serviceworker.js"></script>
+    <link rel="stylesheet" href="@@XTERM_CSS@@">
+    <link rel="stylesheet" href="@@APP_CSS@@">
+    <script defer src="@@XTERM_JS@@"></script>
+    <script defer src="@@FIT_JS@@"></script>
+    <script defer src="@@PTY_JS@@"></script>
+    <script type="module" src="@@APP_JS@@"></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="masthead">
+        <div class="identity">
+          <p class="eyebrow">RISC-V · OPEN SOURCE · IN YOUR BROWSER</p>
+          <h1>Caffeinix<br><span>console</span></h1>
+          <p class="lede">
+            A real Caffeinix kernel, OpenSBI, and BusyBox shell running
+            entirely on this device. No remote VM and no shared session.
+          </p>
+        </div>
+        <div class="header-links">
+          <span class="local-badge"><i></i> Runs locally</span>
+          <a href="https://github.com/TroyMitchell911/caffeinix"
+             rel="noreferrer">Kernel source <span aria-hidden="true">↗</span></a>
+        </div>
+      </header>
+
+      <section class="runtime-summary" aria-label="Virtual machine details">
+        <div>
+          <span class="summary-label">Architecture</span>
+          <strong>RV64GC</strong>
+        </div>
+        <div>
+          <span class="summary-label">Firmware</span>
+          <strong>OpenSBI</strong>
+        </div>
+        <div>
+          <span class="summary-label">Userspace</span>
+          <strong>musl + BusyBox</strong>
+        </div>
+        <div>
+          <span class="summary-label">Guest memory</span>
+          <strong>64 MiB</strong>
+        </div>
+      </section>
+
+      <section class="console-card" aria-label="Caffeinix terminal">
+        <div class="toolbar">
+          <div class="window-lights" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="status-line" role="status" aria-live="polite">
+            <span id="status-dot" class="status-dot"></span>
+            <span id="status">Preparing runtime</span>
+          </div>
+          <div class="controls">
+            <label class="cpu-control" for="cpu-select">
+              <span>Harts</span>
+              <select id="cpu-select">
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+              </select>
+            </label>
+            <button id="start" class="primary" type="button" disabled>
+              Start
+            </button>
+            <button id="stop" type="button" disabled>Stop</button>
+            <button id="reset" type="button" disabled>Reset</button>
+          </div>
+        </div>
+
+        <ol class="boot-steps" aria-label="Boot progress">
+          <li data-stage="download"><span>1</span> Download</li>
+          <li data-stage="verify"><span>2</span> Verify</li>
+          <li data-stage="firmware"><span>3</span> OpenSBI</li>
+          <li data-stage="kernel"><span>4</span> Kernel</li>
+          <li data-stage="shell"><span>5</span> Shell</li>
+        </ol>
+
+        <div id="terminal" class="terminal" aria-label="Interactive terminal"
+             tabindex="0"></div>
+      </section>
+
+      <footer>
+        <p id="version">Loading pinned build information…</p>
+        <p>
+          Writes live only in memory and disappear on reset.
+          <a href="https://github.com/TroyMitchell911/caffeinix-web"
+             rel="noreferrer">How it works</a>
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>
