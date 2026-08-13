@@ -29,8 +29,9 @@ contains this notice, individual browser-library license texts under
   `sources/xterm-pty-source.tgz`.
 - coi-serviceworker 0.1.7 is pinned to upstream commit
   `7b1d2a092d0d2dd2b7270b6f12f13605de26f214` and is MIT licensed. The local
-  formatting-adjusted copy retains its copyright notice; the license is
-  published as `licenses/coi-serviceworker.txt`.
+  copy retains its copyright notice and adds lookup of verified same-origin
+  assets in Cache Storage; the license is published as
+  `licenses/coi-serviceworker.txt`.
 
 ## QEMU-WASM build dependencies
 

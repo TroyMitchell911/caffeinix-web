@@ -14,6 +14,8 @@ const versionLabel = document.getElementById("version");
 const stageItems = Array.from(document.querySelectorAll(".boot-steps li"));
 const stageOrder = ["download", "verify", "firmware", "kernel", "shell"];
 const autoStartKey = "caffeinix-autostart";
+const assetCacheName = "caffeinix-verified-assets-v1";
+const assetDigestHeader = "X-Caffeinix-Asset-SHA256";
 
 const terminal = new Terminal({
   allowProposedApi: false,
@@ -48,6 +50,7 @@ let runtime = null;
 let ptyMaster = null;
 let state = "preparing";
 let ignoreRuntimeErrors = false;
+let assetCache = null;
 
 function setStatus(label, kind = "") {
   statusLabel.textContent = label;
@@ -104,7 +107,21 @@ function hex(bytes) {
 
 async function fetchVerified(asset, progress, keep) {
   const url = absoluteAsset(asset);
-  const response = await fetch(url, { cache: "force-cache" });
+  const cached = await assetCache.match(url);
+  if (cached
+      && cached.headers.get(assetDigestHeader) === asset.sha256
+      && Number(cached.headers.get("Content-Length")) === asset.size) {
+    const bytes = new Uint8Array(await cached.arrayBuffer());
+    if (bytes.byteLength === asset.size) {
+      progress("Reading", bytes.byteLength);
+      return keep ? bytes : null;
+    }
+    await assetCache.delete(url);
+  } else if (cached) {
+    await assetCache.delete(url);
+  }
+
+  const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`download failed (${response.status}): ${asset.path}`);
   }
@@ -112,7 +129,7 @@ async function fetchVerified(asset, progress, keep) {
   let bytes;
   if (!response.body) {
     bytes = new Uint8Array(await response.arrayBuffer());
-    progress(bytes.byteLength);
+    progress("Downloading", bytes.byteLength);
   } else {
     bytes = new Uint8Array(asset.size);
     const reader = response.body.getReader();
@@ -127,18 +144,41 @@ async function fetchVerified(asset, progress, keep) {
       }
       bytes.set(value, offset);
       offset += value.byteLength;
-      progress(value.byteLength);
+      progress("Downloading", value.byteLength);
     }
     if (offset !== bytes.byteLength) {
       throw new Error(`asset size mismatch: ${asset.path}`);
     }
   }
 
+  setStatus(`Verifying ${url.pathname.split("/").at(-1)}`, "waiting");
   const digest = hex(await crypto.subtle.digest("SHA-256", bytes));
   if (digest !== asset.sha256) {
     throw new Error(`SHA-256 mismatch: ${asset.path}`);
   }
+
+  const headers = new Headers(response.headers);
+  headers.set(assetDigestHeader, asset.sha256);
+  headers.set("Content-Length", String(asset.size));
+  try {
+    await assetCache.put(url, new Response(bytes, { headers }));
+  } catch (error) {
+    console.warn(`could not cache ${asset.path}`, error);
+  }
   return keep ? bytes : null;
+}
+
+async function pruneAssetCache(assets) {
+  const current = new Map(assets.map((asset) => [
+    absoluteAsset(asset).href,
+    asset.sha256,
+  ]));
+  for (const request of await assetCache.keys()) {
+    const response = await assetCache.match(request);
+    if (current.get(request.url) !== response?.headers.get(assetDigestHeader)) {
+      await assetCache.delete(request);
+    }
+  }
 }
 
 function checkBrowser() {
@@ -157,6 +197,9 @@ function checkBrowser() {
   }
   if (!crypto?.subtle) {
     missing.push("Web Crypto");
+  }
+  if (!window.caches) {
+    missing.push("Cache Storage");
   }
   return missing;
 }
@@ -230,7 +273,7 @@ function fail(error) {
   console.error(error);
 }
 
-async function downloadRuntime() {
+async function loadRuntime() {
   const assets = [
     manifest.runtime.module,
     manifest.runtime.wasm,
@@ -241,13 +284,14 @@ async function downloadRuntime() {
   ];
   const total = assets.reduce((sum, asset) => sum + asset.size, 0);
   let loaded = 0;
-  const progress = (increment) => {
+  const progress = (operation, increment) => {
     loaded += increment;
     const percent = Math.min(100, Math.floor((loaded * 100) / total));
-    setStatus(`Downloading ${percent}%`, "waiting");
+    setStatus(`${operation} ${percent}%`, "waiting");
   };
 
   setStage("download");
+  await pruneAssetCache(assets);
   const images = {};
   for (const asset of assets) {
     const keep = asset === manifest.guest.firmware
@@ -288,7 +332,8 @@ async function launch() {
   terminal.writeln("\x1b[38;5;114mPreparing the local RISC-V VM…\x1b[0m");
 
   try {
-    const images = await downloadRuntime();
+    const images = await loadRuntime();
+    setStatus("Creating clean VM", "waiting");
     const moduleUrl = absoluteAsset(manifest.runtime.module).href;
     const { default: initQemu } = await import(moduleUrl);
     const { master, slave } = openpty();
@@ -374,6 +419,7 @@ async function prepare() {
       throw new Error(`manifest download failed (${response.status})`);
     }
     manifest = await response.json();
+    assetCache = await caches.open(assetCacheName);
     const commit = manifest.guest.commit.slice(0, 12);
     versionLabel.textContent =
       `Caffeinix ${commit} · OpenSBI ${manifest.opensbi.version}`

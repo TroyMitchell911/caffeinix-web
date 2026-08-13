@@ -29,6 +29,20 @@ test("boots an interactive, responsive Caffeinix guest", async ({
 }, testInfo) => {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(String(error)));
+  await page.addInitScript(() => {
+    window.__caffeinixStatusHistory = [];
+    window.addEventListener("DOMContentLoaded", () => {
+      const status = document.querySelector("#status");
+      const record = () => window.__caffeinixStatusHistory.push(
+        status?.textContent || "",
+      );
+      record();
+      new MutationObserver(record).observe(status, {
+        childList: true,
+        subtree: true,
+      });
+    });
+  });
 
   await page.goto("./", { waitUntil: "domcontentloaded" });
   await expect(page.locator("h1")).toContainText("Caffeinix");
@@ -45,6 +59,14 @@ test("boots an interactive, responsive Caffeinix guest", async ({
   await page.locator("#start").click();
   await waitForState(page, "running");
   await expect(page.locator("#status")).toHaveText("Shell ready");
+  const initialStatuses = await page.evaluate(() =>
+    window.__caffeinixStatusHistory,
+  );
+  expect(initialStatuses.some((status) => status.startsWith("Downloading ")))
+    .toBe(true);
+  expect(initialStatuses.some((status) => status.startsWith("Verifying ")))
+    .toBe(true);
+  expect(initialStatuses).toContain("Creating clean VM");
 
   const bootLog = await text(page);
   expect(bootLog).toContain("Hello! Caffeinix");
@@ -75,17 +97,30 @@ test("boots an interactive, responsive Caffeinix guest", async ({
   });
   expect(pageErrors).toEqual([]);
 
-  await page.locator("#stop").click();
-  await waitForState(page, "stopped", 10_000);
-  await expect(page.locator("#status")).toHaveText("Stopped");
-
   if (testInfo.project.name === "desktop-chromium") {
-    await page.locator("#start").click();
+    await Promise.all([
+      page.waitForEvent("framenavigated"),
+      page.locator("#reset").click(),
+    ]);
     await waitForState(page, "running");
+    const resetStatuses = await page.evaluate(() =>
+      window.__caffeinixStatusHistory,
+    );
+    expect(resetStatuses.some((status) => status.startsWith("Reading ")))
+      .toBe(true);
+    expect(resetStatuses.some((status) => status.startsWith("Downloading ")))
+      .toBe(false);
+    expect(resetStatuses.some((status) => status.startsWith("Verifying ")))
+      .toBe(false);
+    expect(resetStatuses).toContain("Creating clean VM");
     await command(
       page,
       "if [ ! -e /tmp/session-marker ]; then echo RESET_IS_CLEAN; fi",
       "RESET_IS_CLEAN",
     );
   }
+
+  await page.locator("#stop").click();
+  await waitForState(page, "stopped", 10_000);
+  await expect(page.locator("#status")).toHaveText("Stopped");
 });

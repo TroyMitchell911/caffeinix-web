@@ -29,7 +29,9 @@ if (typeof window === "undefined") {
     const request = coepCredentialless && original.mode === "no-cors"
       ? new Request(original, { credentials: "omit" })
       : original;
-    event.respondWith(fetch(request).then((response) => {
+    event.respondWith(caches.match(request).then((cached) =>
+      cached || fetch(request)
+    ).then((response) => {
       if (response.status === 0) {
         return response;
       }

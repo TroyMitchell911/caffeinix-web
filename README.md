@@ -10,6 +10,11 @@ the QEMU threads, and Reset starts from the published clean image. There is no
 guest network device, persistent disk, WebSocket, API server, container
 runtime, or shared session.
 
+Verified, content-addressed runtime and guest assets are kept in browser Cache
+Storage. A reset reads the trusted assets locally and creates a new writable
+copy of the clean root image. Only assets whose manifest hash changes are
+downloaded and verified again.
+
 ## Browser requirements
 
 The emulator needs WebAssembly threads, `SharedArrayBuffer`, and a secure

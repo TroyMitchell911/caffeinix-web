@@ -87,7 +87,7 @@
         </div>
 
         <ol class="boot-steps" aria-label="Boot progress">
-          <li data-stage="download"><span>1</span> Download</li>
+          <li data-stage="download"><span>1</span> Load</li>
           <li data-stage="verify"><span>2</span> Verify</li>
           <li data-stage="firmware"><span>3</span> OpenSBI</li>
           <li data-stage="kernel"><span>4</span> Kernel</li>
