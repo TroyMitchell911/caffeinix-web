@@ -1,10 +1,9 @@
 # Caffeinix browser console
 
-Caffeinix runs as a static site at
-<https://troymitchell911.github.io/caffeinix-web/>. The visitor's browser runs
-OpenSBI, the Caffeinix RISC-V kernel, and a musl/BusyBox userspace inside
-QEMU WebAssembly. GitHub Pages only serves files; it does not host a VM or a
-terminal backend.
+The [Caffeinix browser console](https://caffeinix.troy-y.org/) runs OpenSBI,
+the Caffeinix RISC-V kernel, and a musl/BusyBox userspace inside QEMU
+WebAssembly on the visitor's device. GitHub Pages only serves files; it does
+not host a VM or a terminal backend.
 
 Each tab owns an independent writable in-memory ext4 image. Stop terminates
 the QEMU threads, and Reset starts from the published clean image. There is no
