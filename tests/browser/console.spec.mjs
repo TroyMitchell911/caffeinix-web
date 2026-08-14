@@ -69,7 +69,7 @@ test("boots an interactive, responsive Caffeinix guest", async ({
   expect(initialStatuses).toContain("Creating clean VM");
 
   const bootLog = await text(page);
-  expect(bootLog).toContain("Hello! Caffeinix");
+  expect(bootLog).toMatch(/\[\s*\d+\.\d+\]\s+Caffeinix RISC-V\b/);
   expect(bootLog).toContain("BusyBox v1.38.0");
   expect(bootLog).toContain("CPU: logical=0");
   if (!mobile) {
